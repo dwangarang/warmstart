@@ -1,0 +1,5 @@
+.DS_Store
+.env
+*.local.json
+# Never commit an unredacted n8n export — it carries base ids and your profile
+*credentials*.json

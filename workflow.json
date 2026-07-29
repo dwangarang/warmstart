@@ -1,0 +1,781 @@
+{
+  "name": "OFFERZZZ",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const companies = [\n  { name: 'Example Co', token: 'exampleco' },\n  { name: 'Acme Inc', token: 'acmeinc' },\n];\n\nconst allJobs = [];\n\nfor (const company of companies) {\n  try {\n    const response = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://boards-api.greenhouse.io/v1/boards/${company.token}/jobs?content=true`,\n    });\n    \n    if (response.jobs) {\n      for (const job of response.jobs) {\n        allJobs.push({\n          json: {\n            source: 'greenhouse',\n            company: company.name,\n            title: job.title,\n            location: job.location?.name || 'Unknown',\n            url: job.absolute_url,\n            department: job.departments?.[0]?.name || '',\n            description_snippet: (job.content || '').substring(0, 500),\n            external_id: `gh_${company.token}_${job.id}`,\n            date_found: new Date().toISOString().split('T')[0],\n          }\n        });\n      }\n    }\n  } catch (e) {\n    allJobs.push({\n      json: { error: `Failed for ${company.name}: ${e.message}` }\n    });\n  }\n}\n\nreturn allJobs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -16
+      ],
+      "id": "486b0aae-f964-4a56-93e5-d44a2f8afcd0",
+      "name": "Fetch Greenhouse Jobs",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const companies = [\n  { name: 'Example Co', token: 'exampleco' },\n];\n\nconst allJobs = [];\n\nfor (const company of companies) {\n  try {\n    const response = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://api.lever.co/v0/postings/${company.token}?mode=json`,\n    });\n    \n    if (Array.isArray(response)) {\n      for (const job of response) {\n        allJobs.push({\n          json: {\n            source: 'lever',\n            company: company.name,\n            title: job.text,\n            location: job.categories?.location || 'Unknown',\n            url: job.hostedUrl,\n            department: job.categories?.team || job.categories?.department || '',\n            description_snippet: (job.descriptionPlain || '').substring(0, 500),\n            external_id: `lev_${company.token}_${job.id}`,\n            date_found: new Date().toISOString().split('T')[0],\n          }\n        });\n      }\n    }\n  } catch (e) {\n    allJobs.push({\n      json: { error: `Failed for ${company.name}: ${e.message}` }\n    });\n  }\n}\n\nreturn allJobs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        368
+      ],
+      "id": "f10c633f-9e11-40dc-8895-f8a0a98cc800",
+      "name": "Fetch Lever Jobs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const companies = [\n  { name: 'Example Co', token: 'exampleco' },\n  { name: 'Acme Inc', token: 'acmeinc' },\n];\n\nconst allJobs = [];\n\nfor (const company of companies) {\n  try {\n    const response = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://api.ashbyhq.com/posting-api/job-board/${company.token}`,\n      headers: { 'Accept': 'application/json' },\n    });\n    \n    if (response.jobs) {\n      for (const job of response.jobs) {\n        allJobs.push({\n          json: {\n            source: 'ashby',\n            company: company.name,\n            title: job.title,\n            location: job.location || 'Unknown',\n            url: job.applyUrl || `https://jobs.ashbyhq.com/${company.token}/${job.id}`,\n            department: job.department || '',\n            description_snippet: (job.descriptionPlain || '').substring(0, 500),\n            external_id: `ash_${company.token}_${job.id}`,\n            date_found: new Date().toISOString().split('T')[0],\n          }\n        });\n      }\n    }\n  } catch (e) {\n    allJobs.push({\n      json: { error: `Failed for ${company.name}: ${e.message}` }\n    });\n  }\n}\n\nreturn allJobs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        176
+      ],
+      "id": "6c5e1bca-62ca-4db5-8479-f3ba6da2e019",
+      "name": "Fetch Ashby Jobs"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        448,
+        160
+      ],
+      "id": "e778f15e-0b37-49fb-ab84-fd9a90fb8e64",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $input.all();\n\n// TITLE EXCLUSIONS \u2014 roles that don't fit your profile\nconst excludeTitles = [\n  // Engineering & technical\n  'engineer', 'developer', 'software', 'frontend', 'backend', 'fullstack',\n  'devops', 'sre', 'infrastructure', 'architect', 'platform eng',\n  // Design\n  'designer', 'ux ', 'ui ', 'design manager', 'graphic design',\n  // Legal & compliance\n  'legal', 'counsel', 'compliance', 'paralegal', 'attorney', 'regulatory',\n  'aml ', 'anti-money', 'money laundering', 'financial crimes',\n  // Finance & accounting\n  'accountant', 'accounting', 'tax ', 'audit', 'bookkeeper', 'controller',\n  'accounts receivable', 'accounts payable', 'treasury', 'billing',\n  'reconciliation', 'safeguarding',\n  // HR & recruiting\n  'recruiter', 'recruiting', 'sourcer', 'people partner', 'employee relations',\n  'compensation analyst', 'compensation design',\n  // Admin & facilities\n  'administrative', 'receptionist', 'office manager', 'facilities',\n  'coordinator', 'executive assistant',\n  // Sales execution (quota-carrying)\n  'account executive', 'sales development rep', 'sdr', 'bdr',\n  'account development rep', 'regional vp of', 'rvp,',\n  'channel sales', 'sales manager',\n  // Data science & analytics (technical)\n  'data scientist', 'data engineer', 'machine learning', 'ml engineer',\n  'data analyst',\n  // Customer support & ops specialists\n  'support specialist', 'collections specialist', 'collections program',\n  'customer funds', 'contracting operations',\n  // Clinical / medical\n  'nurse', 'physician', 'therapist', 'clinical',\n  // Internships\n  'intern', 'internship',\n  // Other non-fit\n  'content writer', 'data writer', 'copywriter',\n  'event manager', 'events manager', 'corporate events',\n  // Product management (explicitly not targeting)\n'product manager', 'product lead', 'product management',\n'staff product manager', 'senior product manager', 'agent product manager',\n// Revenue/pricing ops\n'revenue operations', 'rev ops', 'deal pricing', 'pricing manager',\n// Investor/finance-titled roles\n'forward deployed investor',\n];\n\n// LOCATION WHITELIST \u2014 only keep these geographies\nconst allowedLocations = [\n  'singapore', 'hong kong',\n  'us', 'united states', 'america',\n  'san francisco', 'new york', 'nyc', 'sf,', 'seattle', 'chicago',\n  'boston', 'denver', 'austin', 'los angeles', 'la,',\n  'south san francisco', 'menlo park', 'palo alto', 'mountain view',\n  'remote', 'canada', 'toronto',\n  'n/a', 'unknown',\n];\n\nconst filtered = jobs.filter(job => {\n  const title = (job.json.title || '').toLowerCase();\n  const location = (job.json.location || '').toLowerCase();\n  \n  // Check title exclusions\n  for (const kw of excludeTitles) {\n    if (title.includes(kw)) return false;\n  }\n  \n  // Check location whitelist \u2014 must match at least one\n  let locationMatch = false;\n  for (const kw of allowedLocations) {\n    if (location.includes(kw)) {\n      locationMatch = true;\n      break;\n    }\n  }\n  if (!locationMatch) return false;\n  \n  return true;\n});\n\nreturn filtered;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        176
+      ],
+      "id": "34470e28-0b4a-4ab5-b8a2-5417f839a516",
+      "name": "Pre-Filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "const newJobs = $input.all();\n\n// Build a set of external IDs already in Airtable\nlet existingIds = new Set();\ntry {\n  const airtableRecords = $(\"Airtable Search Jobs\").all();\n  for (const rec of airtableRecords) {\n    // Airtable returns fields under rec.json.fields\n    const eid = rec.json.fields?.['External ID'] || rec.json['External ID'] || '';\n    if (eid) existingIds.add(eid);\n  }\n} catch (e) {\n  // If Airtable node returned nothing or errored, treat as empty\n  // (all jobs will be considered \"new\")\n}\n\n// Filter: keep jobs whose external_id is NOT already in Airtable\nconst deduped = newJobs.filter(job => {\n  // *** FIX: upstream nodes use \"external_id\" (lowercase, underscore) ***\n  const eid = job.json.external_id || '';\n  return eid !== '' && !existingIds.has(eid);\n});\n\nif (deduped.length === 0) {\n  return [{ json: { _no_new_jobs: true, message: 'No new jobs found today' } }];\n}\n\nreturn deduped;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        176
+      ],
+      "id": "e09f45e7-fd6e-4244-b8cb-bfde712b61a7",
+      "name": "Deduplicate",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_BASE_ID",
+          "mode": "list",
+          "cachedResultName": "OFFERZZZ"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Job Title": "={{ $json.title }}",
+            "Posting URL": "={{ $json.url }}",
+            "Date Found": "={{ $json.date_found }}",
+            "Status": "={{ $json.status }}",
+            "Location": "={{ $json.location }}",
+            "Key Requirements": "={{ $json.description_snippet }}",
+            "Notes": "={{ $json.department }}",
+            "External ID": "={{ $json.external_id }}",
+            "Company": "={{ $json.company_name_text }}",
+            "Role Family": "={{ $json.role_family }}",
+            "Fit Score": "={{ $json.fit_score }}",
+            "Recommended Action": "={{ $json.recommended_action }}",
+            "Fit Rationale": "={{ $json.fit_rationale }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Posting URL",
+              "displayName": "Posting URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Scored",
+                  "value": "Scored"
+                },
+                {
+                  "name": "Applied",
+                  "value": "Applied"
+                },
+                {
+                  "name": "Interviewing",
+                  "value": "Interviewing"
+                },
+                {
+                  "name": "Closed",
+                  "value": "Closed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Role Family",
+              "displayName": "Role Family",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Strategy / Ops",
+                  "value": "Strategy / Ops"
+                },
+                {
+                  "name": "BizOps",
+                  "value": "BizOps"
+                },
+                {
+                  "name": "Analytics",
+                  "value": "Analytics"
+                },
+                {
+                  "name": "GTM",
+                  "value": "GTM"
+                },
+                {
+                  "name": "PMM",
+                  "value": "PMM"
+                },
+                {
+                  "name": "Chief of Staff",
+                  "value": "Chief of Staff"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Date Found",
+              "displayName": "Date Found",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Fit Score",
+              "displayName": "Fit Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Strong Fit",
+                  "value": "Strong Fit"
+                },
+                {
+                  "name": "Medium Fit",
+                  "value": "Medium Fit"
+                },
+                {
+                  "name": "Weak Fit",
+                  "value": "Weak Fit"
+                },
+                {
+                  "name": "Skip",
+                  "value": "Skip"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Recommended Action",
+              "displayName": "Recommended Action",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Apply Now",
+                  "value": "Apply Now"
+                },
+                {
+                  "name": "Network First",
+                  "value": "Network First"
+                },
+                {
+                  "name": "Watchlist",
+                  "value": "Watchlist"
+                },
+                {
+                  "name": "Skip",
+                  "value": "Skip"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Fit Rationale",
+              "displayName": "Fit Rationale",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Action Reasoning",
+              "displayName": "Action Reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Key Requirements",
+              "displayName": "Key Requirements",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Notes",
+              "displayName": "Notes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Contacts",
+              "displayName": "Contacts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Tasks",
+              "displayName": "Tasks",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "External ID",
+              "displayName": "External ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        -64
+      ],
+      "id": "0790cb71-ca4f-4491-ba84-8ebd70442f00",
+      "name": "Create a record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $input.all();\n\nlet companyMap = {};\ntry {\n  const companies = $(\"Lookup Companies\").all();\n  for (const c of companies) {\n    const name = (c.json.fields?.[\"Company Name\"] || c.json[\"Company Name\"] || '').toLowerCase().trim();\n    const id = c.json.id || '';\n    if (name && id) companyMap[name] = id;\n  }\n} catch (e) {}\n\nconst enriched = jobs.map(job => {\n  const j = job.json;\n  const companyLower = (j.company || '').toLowerCase().trim();\n  const companyId = companyMap[companyLower] || null;\n  \n  return {\n    json: {\n      ...j,\n      company_record_id: companyId,\n      company_name_text: j.company || '',\n      // role_family already set by Filter & Score \u2014 don't overwrite\n    }\n  };\n});\n\nreturn enriched;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        -64
+      ],
+      "id": "2a3a4dd6-6f3c-45c1-b14c-ae27f3a73503",
+      "name": "Enrich Jobs"
+    },
+    {
+      "parameters": {
+        "batchSize": 12,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        176
+      ],
+      "id": "7cf2bb78-2f77-497a-b10f-f060be33770b",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst passed = items.filter(item => item.json.status !== 'Rejected');\n\nif (passed.length === 0) {\n  return [{ json: { _no_new_jobs: true, message: 'All jobs filtered out' } }];\n}\n\nreturn passed;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -64
+      ],
+      "id": "10a93c75-2cbe-4b34-b098-89f1e7dfe6c8",
+      "name": "Drop Fails"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_BASE_ID",
+          "mode": "list",
+          "cachedResultName": "OFFERZZZ"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Companies"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        -208
+      ],
+      "id": "0d1b784f-ffc2-4df1-8d27-af436dcec907",
+      "name": "Lookup Companies",
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_BASE_ID",
+          "mode": "list",
+          "cachedResultName": "OFFERZZZ"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Jobs"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        -400
+      ],
+      "id": "1881a13c-fdd8-4bc5-9208-1422996789d6",
+      "name": "Airtable Search Jobs",
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -88
+      ],
+      "id": "d0859823-72fc-49dc-8ec7-7bf6b0f01073",
+      "name": "New Jobs Search"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.all()[0].json;\nconst buildPromptOutput = $(\"Build Prompt\").all()[0].json;\nconst originalJobs = buildPromptOutput.originalJobs;\nconst batchCount = buildPromptOutput.batchCount;\n\n// Handle API error\nconst responseText = response?.content?.[0]?.text || '';\nif (!responseText) {\n  return originalJobs.map(j => ({\n    json: {\n      ...j,\n      fit_score: '',\n      recommended_action: '',\n      role_family: 'Other',\n      fit_rationale: `ERROR: Empty API response`,\n      status: 'Rejected',\n    }\n  }));\n}\n\n// Parse response\nconst results = [];\nfor (let i = 0; i < batchCount; i++) {\n  const n = i + 1;\n  const fitMatch = responseText.match(new RegExp(`JOB_${n}\\\\s*Fit Score:\\\\s*(.+)`));\n  const actMatch = responseText.match(new RegExp(`JOB_${n}\\\\s*Recommended Action:\\\\s*(.+)`));\n  const famMatch = responseText.match(new RegExp(`JOB_${n}\\\\s*Role Family:\\\\s*(.+)`));\n  const ratMatch = responseText.match(new RegExp(`JOB_${n}\\\\s*Rationale:\\\\s*(.+)`));\n  const fitScore = fitMatch?.[1]?.trim() || 'Skip';\n  const recAction = actMatch?.[1]?.trim() || 'Skip';\n\n  results.push({\n    json: {\n      ...originalJobs[i],\n      fit_score: fitScore === 'Skip' ? '' : fitScore,\n      recommended_action: recAction === 'Skip' ? '' : recAction,\n      role_family: famMatch?.[1]?.trim() || 'Other',\n      fit_rationale: ratMatch?.[1]?.trim() || '',\n      status: fitScore === 'Skip' ? 'Rejected' : 'New',\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        272
+      ],
+      "id": "86ef5696-8998-4d79-a7d4-30063fa4f3ac",
+      "name": "Parse Scores"
+    },
+    {
+      "parameters": {
+        "jsCode": "const batch = $input.all();\n\n// Pass through no-jobs flag\nif (batch.length === 1 && batch[0].json._no_new_jobs) {\n  return batch;\n}\n\nconst systemPrompt = `You are a job scoring system. You will receive multiple jobs numbered JOB_1, JOB_2, etc.\nFor EACH job, return EXACTLY 4 lines prefixed with the job number. No other text.\nCandidate: [YOUR PROFILE \u2014 e.g. MBA (YEAR), ex-CONSULTING FIRM (N yrs, INDUSTRIES), LANGUAGES, based in CITY]. Targeting [YOUR TARGET ROLES] at [YOUR TARGET SECTORS].\nSKIP immediately if: Engineering, Product Management, Product Lead, Sales (AE/SDR/BDR), Solutions/Technical Account Mgmt, Design, HR, Legal, Finance/Accounting, Support, Customer Success, Comms/PR, Demand Gen, Field Marketing, Events, Data Science/ML, Revenue Operations, Deal Pricing, or if seniority requires 10+ years (Director+ at companies with 1000+ employees, VP/C-suite anywhere).\nFor each job respond EXACTLY in this format:\nJOB_N Fit Score: [Strong Fit / Medium Fit / Weak Fit / Skip]\nJOB_N Recommended Action: [Apply Now / Network First / Watchlist / Skip]\nJOB_N Role Family: [Strategy / Ops / BizOps / Analytics / GTM / PMM / Chief of Staff / Other]\nJOB_N Rationale: [1 sentence]`;\n\nconst userMessage = batch.map((item, idx) => {\n  const j = item.json;\n  return `JOB_${idx + 1}:\nTitle: ${j.title || ''}\nCompany: ${j.company || ''}\nLocation: ${j.location || ''}\nDepartment: ${j.department || ''}\nDescription: ${(j.description_snippet || '').substring(0, 400)}`;\n}).join('\\n\\n');\n\n// Output one item containing the API request body and original jobs\nreturn [{\n  json: {\n    requestBody: {\n      model: 'claude-haiku-4-5-20251001',\n      max_tokens: 700,\n      system: systemPrompt,\n      messages: [{ role: 'user', content: userMessage }],\n    },\n    batchCount: batch.length,\n    originalJobs: batch.map(b => b.json),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        128
+      ],
+      "id": "321729ab-a18f-4588-abf2-0a9af796457c",
+      "name": "Build Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        128
+      ],
+      "id": "68de7605-3596-4d74-b29d-aaa405e2e527",
+      "name": "Call Haiku",
+      "credentials": {
+        "anthropicApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Anthropic account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Fetch Greenhouse Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Lever Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch Ashby Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Pre-Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pre-Filter": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Jobs": {
+      "main": [
+        [
+          {
+            "node": "Create a record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Drop Fails",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drop Fails": {
+      "main": [
+        [
+          {
+            "node": "Enrich Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Companies": {
+      "main": [
+        []
+      ]
+    },
+    "Airtable Search Jobs": {
+      "main": [
+        []
+      ]
+    },
+    "New Jobs Search": {
+      "main": [
+        [
+          {
+            "node": "Fetch Greenhouse Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Lever Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Ashby Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Airtable Search Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lookup Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Haiku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Haiku": {
+      "main": [
+        [
+          {
+            "node": "Parse Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Scores": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "tags": []
+}
