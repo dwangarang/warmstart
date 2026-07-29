@@ -1,8 +1,10 @@
-# OFFERZZZ
+# warmstart
 
-An n8n workflow that watches company job boards, scores every new posting against a candidate profile using Claude, and writes the results to Airtable — so a job search runs on a schedule instead of on willpower.
+**From cold job board to first-round conversation.**
 
-**The problem it solves:** checking twenty career pages by hand, every day, is exactly the kind of task people abandon in week two. This does it at 100% consistency and adds a reasoning layer on top.
+An n8n workflow that watches company job boards on a schedule, scores every new posting against a candidate profile using Claude, and writes the results to Airtable with a recommended next action. The goal is to cut the distance between a role existing and you being in a conversation about it.
+
+Checking twenty career pages by hand every day is the kind of task people abandon in week two. This runs at full consistency and adds a reasoning layer on top.
 
 ## How it works
 
@@ -20,37 +22,38 @@ Schedule Trigger (daily)
                                                     Drop Fails ─► Enrich ─► Airtable
 ```
 
-1. **Fan-out fetch** — hits the public job APIs of three ATS platforms (Greenhouse, Lever, Ashby) in parallel. Each returns a different shape; each node normalizes to a common schema.
-2. **Pre-filter** — a deterministic pass that drops roles by title keyword and location whitelist. This runs *before* the LLM, so obvious non-matches never cost a token.
-3. **Deduplicate** — checks each posting's `external_id` against what's already in Airtable, so re-runs are idempotent and only genuinely new roles proceed.
-4. **Batched scoring** — surviving jobs are chunked and sent to `claude-haiku-4-5` in batches, with a system prompt that pins the output to exactly four lines per job. Batching is what keeps this economical: one call scores many roles.
-5. **Parse and enrich** — responses are parsed back into structured fields (fit score, recommended action, role family, one-line rationale). Malformed rows get dropped rather than corrupting the table.
-6. **Write** — new records land in Airtable, ready to triage.
+1. **Fan-out fetch.** Three nodes hit the public job APIs of Greenhouse, Lever, and Ashby in parallel. Each platform returns a different shape. Each node normalizes to a common schema.
+2. **Pre-filter.** A deterministic pass drops roles by title keyword and location whitelist. It runs before the model, so obvious non-matches never cost a token.
+3. **Deduplicate.** Each posting's `external_id` is checked against what Airtable already holds. Re-runs are idempotent. Only genuinely new roles continue.
+4. **Batched scoring.** Surviving jobs are chunked and sent to `claude-haiku-4-5`. The system prompt pins output to exactly four lines per job.
+5. **Parse and enrich.** Responses are parsed back into structured fields: fit score, recommended action, role family, and a one-line rationale. Malformed rows are dropped rather than written.
+6. **Write.** New records land in Airtable with a recommended action attached, ready to act on.
 
 ## Design notes
 
-A few decisions that mattered more than they look:
+Decisions that mattered more than they look:
 
-- **Cheap filter before expensive filter.** The keyword pre-filter is unglamorous but removes the large majority of postings for free. The LLM only ever sees plausible candidates.
-- **Batching over per-item calls.** Scoring jobs one API call at a time is the obvious implementation and roughly an order of magnitude more expensive. The `Build Prompt` node assembles many jobs into a single numbered request.
-- **A rigid output contract.** The system prompt demands exactly four prefixed lines per job. Free-form output would have made `Parse Scores` a parsing nightmare.
-- **Fail open, not dirty.** `Drop Fails` discards anything that didn't parse cleanly instead of writing partial records into Airtable.
+- **Cheap filter before expensive filter.** The keyword pre-filter is unglamorous. It removes most postings for free, so the model only ever sees plausible candidates.
+- **Batching over per-item calls.** Scoring one job per API call is the obvious implementation. It costs roughly an order of magnitude more. The `Build Prompt` node assembles many jobs into one numbered request.
+- **A rigid output contract.** The system prompt demands exactly four prefixed lines per job. Free-form output would make `Parse Scores` unreliable.
+- **Drop bad rows instead of writing them.** `Drop Fails` discards anything that did not parse cleanly. Partial records in Airtable are worse than missing ones.
+- **Recommend an action, not just a score.** Every row gets Apply Now, Network First, Watchlist, or Skip. A score alone still leaves you deciding what to do next.
 
 ## Setup
 
 You need an [n8n](https://n8n.io) instance, an Airtable base, and an Anthropic API key.
 
-1. **Import the workflow** — in n8n, *Workflows → Import from File → `workflow.json`*.
+1. **Import the workflow.** In n8n, go to Workflows, then Import from File, and select `workflow.json`.
 
 2. **Create the Airtable base** with two tables:
-   - `Jobs` — the output table (title, company, location, url, fit score, action, role family, rationale, date found)
-   - `Companies` — your watchlist
+   - `Jobs` for output: title, company, location, url, fit score, action, role family, rationale, date found.
+   - `Companies` for your watchlist.
 
-3. **Add credentials** in n8n (*Settings → Credentials*): an Airtable Personal Access Token and an Anthropic API credential. Then open each Airtable node and the `Call Claude` node and select them — the placeholders in `workflow.json` (`REPLACE_WITH_YOUR_CREDENTIAL_ID`) do not resolve on their own.
+3. **Add credentials** in n8n under Settings, then Credentials. You need an Airtable Personal Access Token and an Anthropic API credential. Open each Airtable node and the `Call Claude` node and select them. The placeholders in `workflow.json` (`REPLACE_WITH_YOUR_CREDENTIAL_ID`) do not resolve on their own.
 
-4. **Point at your base** — in each Airtable node, replace `REPLACE_WITH_YOUR_BASE_ID` / `REPLACE_WITH_YOUR_TABLE_ID` by picking your base and table from the dropdown.
+4. **Point at your base.** In each Airtable node, replace `REPLACE_WITH_YOUR_BASE_ID` and `REPLACE_WITH_YOUR_TABLE_ID` by picking your base and table from the dropdown.
 
-5. **Set your target companies** — edit the `companies` array at the top of each fetch node. The `token` is the board slug from the company's careers URL:
+5. **Set your target companies.** Edit the `companies` array at the top of each fetch node. The `token` is the board slug from the company's careers URL.
 
    ```js
    const companies = [
@@ -58,13 +61,15 @@ You need an [n8n](https://n8n.io) instance, an Airtable base, and an Anthropic A
    ];
    ```
 
-6. **Set your candidate profile** — in `Build Prompt`, replace the `Candidate: [YOUR PROFILE ...]` placeholder with a description of yourself and the roles you're targeting. This is what the scoring is relative to.
+6. **Set your candidate profile.** In `Build Prompt`, replace the `Candidate: [YOUR PROFILE ...]` placeholder with a description of yourself and the roles you want. Scoring is relative to this.
 
-7. **Tune the filters** — `Pre-Filter` holds an `excludeTitles` array and an `allowedLocations` whitelist. Both are worth adjusting to your search.
+7. **Tune the filters.** `Pre-Filter` holds an `excludeTitles` array and an `allowedLocations` whitelist. Both are worth adjusting to your search.
 
-## A note on what's in this repo
+## What is in this repo
 
-This is a redacted export. Credential IDs, the Airtable base and table IDs, the original target-company list, and the candidate profile have all been replaced with placeholders. No API keys were ever stored in the workflow file itself — n8n keeps credentials server-side and the export only ever referenced them by ID.
+This is a redacted export. Credential IDs, the Airtable base and table IDs, the original target-company list, and the candidate profile are all placeholders.
+
+No API keys were ever stored in the workflow file. n8n keeps credentials server-side and the export references them by ID only.
 
 ## License
 
